@@ -1,59 +1,51 @@
 const std = @import("std");
 const tensorImpl = @import("TensorImplementacao.zig");
-const computacao = @import("../../../computacao/mod.zig");
+const computacao = @import("computacao");
 
-// For now CPUSIMD uses same layout but could use SIMD-optimized storage
-const SimdImplementacao = struct {
-    data_bytes: []u8,
-    count: usize,
-};
+// Use shared BackendInstance from TensorImplementacao
+const Backend = tensorImpl.BackendInstance;
 
-fn simd_get(impl_ptr: *anyopaque, i: usize) f64 {
-    const s = @ptrCast(*SimdImplementacao, impl_ptr);
-    const p = @ptrCast(*f64, s.data_bytes.ptr);
-    return p[i];
+pub fn simd_get(impl_ptr: *Backend, i: usize) f64 {
+    const s = impl_ptr.*;
+    return s.data[i];
 }
 
-fn simd_set(impl_ptr: *anyopaque, i: usize, v: f64) void {
-    const s = @ptrCast(*SimdImplementacao, impl_ptr);
-    const p = @ptrCast(*f64, s.data_bytes.ptr);
-    p[i] = v;
+pub fn simd_set(impl_ptr: *Backend, i: usize, v: f64) void {
+    const s = impl_ptr.*;
+    s.data[i] = v;
 }
 
-fn simd_toArray(impl_ptr: *anyopaque, allocator: *std.mem.Allocator) anyerror![]f64 {
-    const s = @ptrCast(*SimdImplementacao, impl_ptr);
+pub fn simd_toArray(impl_ptr: *Backend, allocator: *std.mem.Allocator) anyerror![]f64 {
+    const s = impl_ptr.*;
     var out = try allocator.alloc(f64, s.count);
-    const p = @ptrCast(*f64, s.data_bytes.ptr);
-    for (p[0..s.count]) |val, idx| out[idx] = val;
+    for (0..s.count) |i| out[i] = s.data[i];
     return out;
 }
 
-fn simd_destroy(allocator: *std.mem.Allocator, impl_ptr: *anyopaque) void {
-    const s = @ptrCast(*SimdImplementacao, impl_ptr);
-    allocator.free(s.data_bytes);
-    allocator.destroy(s);
+pub fn simd_destroy(allocator: *std.mem.Allocator, impl_ptr: *Backend) void {
+    const s = impl_ptr.*;
+    allocator.free(s.data);
+    allocator.destroy(impl_ptr);
 }
 
 const simd_vtable = tensorImpl.TensorImplementacao{
-    .get = simd_get,
-    .set = simd_set,
-    .toArray = simd_toArray,
-    .destroy = simd_destroy,
+    .get = &simd_get,
+    .set = &simd_set,
+    .toArray = &simd_toArray,
+    .destroy = &simd_destroy,
 };
 
 pub const VTABLE = simd_vtable;
 
-pub fn create_impl(ctx: *computacao.ComputacaoContextoModule.ComputacaoContexto, allocator: *std.mem.Allocator, total: usize) !*anyopaque {
+pub fn create_impl(ctx: *computacao.ComputacaoContextoModule.ComputacaoContexto, allocator: *std.mem.Allocator, total: usize) !*Backend {
     _ = ctx;
-    var impl = try allocator.create(SimdImplementacao);
-    const bytes = try ctx.implementacao.*.allocate(allocator, total * @sizeOf(f64));
-    impl.data_bytes = bytes;
+    var impl = try allocator.create(Backend);
+    impl.data = try allocator.alloc(f64, total);
     impl.count = total;
-    const pz = @ptrCast(*f64, bytes.ptr);
-    for (pz[0..total]) |*q| q.* = 0.0;
+    for (0..total) |i| impl.data[i] = 0.0;
     return impl;
 }
 
 // Old constructors removed: use Tensor.init / Tensor.initFromArray in Tensor.zig
 
-pub const error = error{ OutOfMemory, InvalidArgument };
+pub const TensorError = error{ OutOfMemory, InvalidArgument };
