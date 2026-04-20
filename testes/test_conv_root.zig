@@ -3,7 +3,7 @@ const std = @import("std");
 const computacao = @import("src/computacao/ComputacaoContexto.zig");
 const FabricaTensor = @import("src/aprendizado_maquina/nucleo/tensor/FabricaTensor.zig").FabricaTensor;
 
-test "conv and backward CPU (root test)" {
+test "conv and backward CPU (moved test)" {
     var allocator = std.heap.page_allocator;
     var ctx = computacao.ComputacaoCPUContexto();
     var ft = FabricaTensor.init(&ctx, &allocator);
@@ -23,13 +23,11 @@ test "conv and backward CPU (root test)" {
     out.backward(&allocator, &grad);
 
     var any_nonzero: bool = false;
-    for (0..input.size) |i| {
-        if (input.impl_ptr.grad[i] != 0.0) any_nonzero = true;
-    }
+    for (0..input.size) |i| if (input.impl_ptr.grad[i] != 0.0) any_nonzero = true;
     try std.testing.expect(any_nonzero);
 }
 
-test "conv and backward CPUSIMD (root test)" {
+test "conv and backward CPUSIMD (moved test)" {
     var allocator = std.heap.page_allocator;
     var ctx = computacao.ComputacaoCPUSIMDContexto();
     var ft = FabricaTensor.init(&ctx, &allocator);
@@ -49,8 +47,6 @@ test "conv and backward CPUSIMD (root test)" {
     out.backward(&allocator, &grad);
 
     var any_nonzero: bool = false;
-    for (0..input.size) |i| {
-        if (input.impl_ptr.grad[i] != 0.0) any_nonzero = true;
-    }
+    for (0..input.size) |i| if (input.impl_ptr.grad[i] != 0.0) any_nonzero = true;
     try std.testing.expect(any_nonzero);
 }

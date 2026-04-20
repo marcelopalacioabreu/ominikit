@@ -3,7 +3,7 @@ const computacao = @import("src/computacao/ComputacaoContexto.zig");
 const FabricaFuncoesPerda = @import("src/aprendizado_maquina/nucleo/funcoesPerda/FabricaFuncoesPerda.zig").FabricaFuncoesPerda;
 const FabricaTensor = @import("src/aprendizado_maquina/nucleo/tensor/FabricaTensor.zig").FabricaTensor;
 
-test "MSE loss backward CPU and CPUSIMD" {
+test "MSE loss backward CPU and CPUSIMD (moved)" {
     var alloc = std.heap.page_allocator;
     var ctx = computacao.ComputacaoCPUContexto();
     var ft = FabricaTensor.init(&ctx, &alloc);
@@ -32,4 +32,21 @@ test "MSE loss backward CPU and CPUSIMD" {
     var any_nonzero2: bool = false;
     for (0..a2.size) |i| if (a2.impl_ptr.grad[i] != 0.0) any_nonzero2 = true;
     try std.testing.expect(any_nonzero2);
+}
+
+test "Focal loss backward CPU (moved)" {
+    var alloc = std.heap.page_allocator;
+    var ctx = computacao.ComputacaoCPUContexto();
+    var ft = FabricaTensor.init(&ctx, &alloc);
+    const a = try ft.fromArray(&[_]usize{4}, &[_]f64{ 0.9, 0.1, 0.8, 0.2 });
+    defer a.destroy(&alloc);
+    const b = try ft.fromArray(&[_]usize{4}, &[_]f64{ 1.0, 0.0, 1.0, 0.0 });
+    defer b.destroy(&alloc);
+    const out = try FabricaFuncoesPerda.Focal(&ctx, &alloc, a, b, 0.25, 2.0);
+    defer out.destroy(&alloc);
+    const grad = [_]f64{1.0};
+    out.backward(&alloc, &grad);
+    var any_nonzero: bool = false;
+    for (0..a.size) |i| if (a.impl_ptr.grad[i] != 0.0) any_nonzero = true;
+    try std.testing.expect(any_nonzero);
 }
