@@ -1,9 +1,9 @@
 const std = @import("std");
-const computacao = @import("../src/computacao/ComputacaoContexto.zig");
-const FabricaFuncoesPerda = @import("../src/aprendizado_maquina/nucleo/funcoesPerda/FabricaFuncoesPerda.zig").FabricaFuncoesPerda;
-const FabricaTensor = @import("../src/aprendizado_maquina/nucleo/tensor/FabricaTensor.zig").FabricaTensor;
+const computacao = @import("src/computacao/ComputacaoContexto.zig");
+const FabricaFuncoesPerda = @import("src/aprendizado_maquina/nucleo/funcoesPerda/FabricaFuncoesPerda.zig").FabricaFuncoesPerda;
+const FabricaTensor = @import("src/aprendizado_maquina/nucleo/tensor/FabricaTensor.zig").FabricaTensor;
 
-test "MSE loss backward CPU and CPUSIMD (moved)" {
+test "MSE loss backward CPU and CPUSIMD (temp full)" {
     var alloc = std.heap.page_allocator;
     var ctx = computacao.ComputacaoCPUContexto();
     var ft = FabricaTensor.init(&ctx, &alloc);
@@ -38,7 +38,7 @@ test "MSE loss backward CPU and CPUSIMD (moved)" {
     try std.testing.expect(any_nonzero2);
 }
 
-test "Focal loss backward CPU (moved)" {
+test "Focal loss backward CPU (temp full)" {
     var alloc = std.heap.page_allocator;
     var ctx = computacao.ComputacaoCPUContexto();
     var ft = FabricaTensor.init(&ctx, &alloc);
@@ -57,7 +57,7 @@ test "Focal loss backward CPU (moved)" {
     try std.testing.expect(any_nonzero);
 }
 
-test "BCE loss backward CPU and CPUSIMD (moved)" {
+test "BCE loss backward CPU and CPUSIMD (temp full)" {
     var alloc = std.heap.page_allocator;
     var ctx = computacao.ComputacaoCPUContexto();
     var ft = FabricaTensor.init(&ctx, &alloc);
@@ -92,7 +92,7 @@ test "BCE loss backward CPU and CPUSIMD (moved)" {
     try std.testing.expect(any_nonzero2);
 }
 
-test "SmoothL1 loss backward CPU and CPUSIMD (moved)" {
+test "SmoothL1 loss backward CPU and CPUSIMD (temp full)" {
     var alloc = std.heap.page_allocator;
     var ctx = computacao.ComputacaoCPUContexto();
     var ft = FabricaTensor.init(&ctx, &alloc);

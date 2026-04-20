@@ -262,7 +262,8 @@ pub fn cpu_smoothl1_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []
         const d = p - t;
         const upstream = if (has_scalar_upstream) grad[0] else grad[i];
         var dp: f64 = 0.0;
-        if (std.math.abs(d) < 1.0) {
+        const absd = if (d < 0.0) -d else d;
+        if (absd < 1.0) {
             dp = d;
         } else {
             dp = if (d < 0.0) -1.0 else 1.0;

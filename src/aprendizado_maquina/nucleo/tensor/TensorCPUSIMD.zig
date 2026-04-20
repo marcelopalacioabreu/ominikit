@@ -320,3 +320,46 @@ pub fn simd_focal_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []co
         pred.grad[i] += upstream * dp;
     }
 }
+
+pub fn simd_bce_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []const f64) void {
+    const udptr = impl_ptr.user orelse return;
+    const ud = udptr.*;
+    const pred = ud.bce.pred.*;
+    const target = ud.bce.target.*;
+    const n = ud.bce.n;
+
+    const has_scalar_upstream = grad.len == 1;
+    for (0..n) |i| {
+        const p = pred.data[i];
+        const t = target.data[i];
+        const upstream = if (has_scalar_upstream) grad[0] else grad[i];
+        const eps = 1e-12;
+        const pc = if (p < eps) eps else if (p > 1.0 - eps) 1.0 - eps else p;
+        const dp = -(t / pc) + ((1.0 - t) / (1.0 - pc));
+        pred.grad[i] += upstream * dp;
+    }
+}
+
+pub fn simd_smoothl1_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []const f64) void {
+    const udptr = impl_ptr.user orelse return;
+    const ud = udptr.*;
+    const pred = ud.smoothl1.pred.*;
+    const target = ud.smoothl1.target.*;
+    const n = ud.smoothl1.n;
+
+    const has_scalar_upstream = grad.len == 1;
+    for (0..n) |i| {
+        const p = pred.data[i];
+        const t = target.data[i];
+        const d = p - t;
+        const absd = if (d < 0.0) -d else d;
+        const upstream = if (has_scalar_upstream) grad[0] else grad[i];
+        var dp: f64 = 0.0;
+        if (absd < 1.0) {
+            dp = d;
+        } else {
+            dp = if (d < 0.0) -1.0 else 1.0;
+        }
+        pred.grad[i] += upstream * dp;
+    }
+}
