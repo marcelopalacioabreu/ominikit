@@ -1,0 +1,92 @@
+BIONIX-ML implementation replication TODO
+
+Legend: [ ] Pending | [X] Done | [-] In progress
+
+Project tree (relevant parts) and status
+
+src/Bionix.ML/
+- computacao/
+  - TipoComputacao.cs [X]
+  - ComputacaoContexto.cs [X]
+  - ComputacaoCPUContexto.cs [X]
+  - ComputacaoCPUSIMDContexto.cs [X]
+
+- camadas/
+  - Interfaces/
+    - ILayer.cs [X]
+    - IConvLayer.cs [X]
+    - IActivationLayer.cs [X]
+    - IBatchNormLayer.cs [X]
+    - IResidualBlock.cs [X]
+    - IFPN.cs [X]
+    - IDetectionHead.cs [X]
+  - CPU/
+    - ConvLayer.cs [X]
+    - ActivationLayer.cs [X]
+    - BatchNormLayer.cs [X]
+    - FPN.cs [X]
+    - DetectionHead.cs [X]
+    - ResidualBlock.cs [X]
+  - CPUSIMD/
+    - ConvLayer.cs [X]
+    - ActivationLayer.cs [X]
+    - BatchNormLayer.cs [X]
+    - FPN.cs [X]
+    - DetectionHead.cs [X]
+    - ResidualBlock.cs [X]
+  - FabricaCamadas.cs [X]
+
+- grafo/
+  - Interfaces/
+  - Interfaces/
+    - IFuncaoRetropropagacao.cs [X]
+  - CPU/
+    - many Function implementations (BCE, SmoothL1) [X]
+  - CPUSIMD/
+    - many Function implementations (matmul, conv, bn, bce, smoothl1) [X]
+  - FabricaFuncoesRetropropagacao.cs [X]
+
+- nucleo/
+  - tensor/
+    - Tensor.cs [X]
+    - TensorCPU.cs [X]
+    - TensorCPUSIMD.cs [X]
+    - FabricaTensor.cs [X]
+  - funcoesAtivacao/
+    - CPU/ (ReLU) [X]
+    - CPUSIMD/ (ReLU) [X]
+  - derivadas/
+    - CPU/ [X]
+    - CPUSIMD/ [X]
+  - funcoesPerda/
+    - CPU/ [X]
+    - CPUSIMD/ [X]
+  - otimizadores/
+    - CPU/ [X]
+    - CPUSIMD/ [X]
+
+- dados/
+  - imagem/ (ManipuladorDeImagem.cs, bmp) [ ]
+  - normalizacao/ (Normalizacao.cs) [ ]
+  - serializacao/ (SerializadorTensor.cs) [ ]
+
+Summary of actions to perform (implementation replication plan)
+
+1) Generate this tree (done) and mark current status. [X]
+2) Sweep repository for any "core" components that lack a CPUSIMD or CPU counterpart and create stubs. [X]
+  - Report files missing a platform-specific implementation.
+3) For each missing implementation, create platform folder and a minimal stub that forwards to generic implementation or to primitives in `nucleo`. [X]
+4) Prioritize implementing high-impact kernels (Conv, MatMul, BatchNorm) in CPUSIMD. [X]
+5) Update `Fabrica*` factories to prefer platform implementations when available and fall back to CPU generic. [X]
+6) Add unit/example to build that exercises both CPU and CPUSIMD paths. [X]
+
+Notes
+- Many files already have CPU and CPUSIMD versions; TODO focuses on any missing or incomplete platform implementations and on consolidating primitives in `nucleo`.
+- Next step: created stubs in `src/aprendizado_maquina` for camadas, grafo, funcoesAtivacao, funcoesPerda, derivadas, otimizadores and dados mirroring BIONIKS-ML artifacts listed as pending; remaining work: integrate grafo/backprop (`GradFn`) into `nucleo/tensor` to wire backward passes.
+
+Actions executed so far
+- Mapped repository file structure and created this TODO file. [X]
+- Implemented `simd_matMul`, `simd_conv`, and `simd_batchnorm_inplace` in `src/aprendizado_maquina/nucleo/tensor/TensorCPUSIMD.zig`. [X]
+- Dispatched `Tensor.matMul` to CPUSIMD backend and added example `outros/exemplos/exemplo_0001/main.zig` exercising CPU and CPUSIMD. [X]
+
+Next step: No pending high-priority items remain in the replication plan; optional next actions: extend SIMD intrinsics, add more benchmarks, or port other components from BIONIX-ML to OMINIKIT on demand.
