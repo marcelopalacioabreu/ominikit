@@ -1,6 +1,6 @@
 const std = @import("std");
-const computacao = @import("C:/PROJETOS/OMINIKIT/src/computacao/ComputacaoContexto.zig");
-const tensor = @import("C:/PROJETOS/OMINIKIT/src/aprendizado_maquina/nucleo/tensor/Tensor.zig").Tensor;
+const computacao = @import("../../../computacao/ComputacaoContexto.zig");
+const tensor = @import("../../nucleo/tensor/Tensor.zig").Tensor;
 
 pub const ActivationLayer = struct {
     pub fn init(allocator: *std.mem.Allocator) !*ActivationLayer {
