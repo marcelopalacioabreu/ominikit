@@ -320,7 +320,7 @@ pub const Tensor = struct {
         return res;
     }
 
-    fn init_with_type(tipo: tipo_mod.TipoComputacao, allocator: *std.mem.Allocator, shape_in: []const usize) !*Tensor {
+    pub fn init_with_type(tipo: tipo_mod.TipoComputacao, allocator: *std.mem.Allocator, shape_in: []const usize) !*Tensor {
         var total: usize = 1;
         for (shape_in) |d| total *= if (d == 0) 1 else d;
         var shape_buf = try allocator.alloc(usize, shape_in.len);

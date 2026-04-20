@@ -1,35 +1,24 @@
 const std = @import("std");
 
-// Adapter that uses vendored zignal (vendor/zignal) to load images.
-// If zignal is not present, this function will fall back to the older
-// ManipuladorDeImagem implementation.
+// Adapter that uses vendored zignal (vendor/zignal) to load images from
+// in-memory buffers. This avoids any C stdio or non-portable stdlib IO.
 
 const Manipulador = @import("./ManipuladorDeImagem.zig");
 
 pub fn loadAsGray(allocator: *std.mem.Allocator, path: []const u8) !Manipulador.GrayImage {
-    // Try to import vendored zignal. If not found, fall back.
+    _ = allocator;
+    _ = path;
+    return error.FileNotFound;
+}
+
+pub fn loadAsGrayFromBytes(allocator: *std.mem.Allocator, data: []const u8) !Manipulador.GrayImage {
     const zimg = @import("../../../../vendor/zignal/src/image.zig");
     const zcolor = @import("../../../../vendor/zignal/src/color.zig");
     const Rgba = zcolor.Rgba(u8);
     const Img = zimg.Image(Rgba);
 
-    // Read file into memory using current working directory and File.readToEndAlloc
-    const io = std.Io; // use std.Io namespace
-    const cwd = io.Dir.cwd();
-    const file = try cwd.openFile(io, path, .{}) catch {
-        return Manipulador.carregarComoGray(allocator, path);
-    };
-    defer file.close(io);
-
-    const data = try file.readToEndAlloc(allocator, 1024 * 1024);
-    defer allocator.free(data);
-
-    // Load image via zignal
-    var img = try Img.loadFromBytes(allocator, data) catch {
-        // fallback to prior loader on any zignal error
-        return Manipulador.carregarComoGray(allocator, path);
-    };
-    defer img.deinit(allocator);
+    var img = try Img.loadFromBytes(allocator.*, data);
+    defer img.deinit(allocator.*);
 
     const rows = @as(usize, img.rows);
     const cols = @as(usize, img.cols);
@@ -38,15 +27,14 @@ pub fn loadAsGray(allocator: *std.mem.Allocator, path: []const u8) !Manipulador.
     var out = try allocator.alloc(u8, px_count);
 
     // Convert RGB(A) -> grayscale using Rec. 709 luma coefficients
-    for (px_count) |i| {
+    for (0..px_count) |i| {
         const p = img.data[i];
-        const r = @as(f32, p.r);
-        const g = @as(f32, p.g);
-        const b = @as(f32, p.b);
-        const grayf = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        var gval: u8 = @as(u8, std.math.clamp(@as(f32, 0.0), @as(f32, 255.0), grayf));
-        // simple rounding
-        if (grayf >= @as(f32, gval) + 0.5 and gval < 255) gval += 1;
+        // Integer luma approximation (Rec.709 scaled by 10000) to avoid float casts
+        const r_u = @as(u32, p.r);
+        const g_u = @as(u32, p.g);
+        const b_u = @as(u32, p.b);
+        const gray_i = (@as(u32, 2126) * r_u + @as(u32, 7152) * g_u + @as(u32, 722) * b_u + 5000) / 10000;
+        const gval: u8 = @intCast(gray_i);
         out[i] = gval;
     }
 
