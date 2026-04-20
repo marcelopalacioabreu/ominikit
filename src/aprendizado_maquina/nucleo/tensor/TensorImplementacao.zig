@@ -12,6 +12,7 @@ pub const BackendInstance = struct {
     data: []f64,
     grad: []f64,
     count: usize,
+    user: ?*AnyUserData,
 };
 
 pub const MatMulUserData = struct {
@@ -38,6 +39,12 @@ pub const BatchNormUserData = struct {
     n: usize,
 };
 
+pub const MSEUserData = struct {
+    pred: *BackendInstance,
+    target: *BackendInstance,
+    n: usize,
+};
+
 pub const BCEUserData = struct {
     pred: *BackendInstance,
     target: *BackendInstance,
@@ -48,6 +55,24 @@ pub const SmoothL1UserData = struct {
     pred: *BackendInstance,
     target: *BackendInstance,
     n: usize,
+};
+
+pub const FocalUserData = struct {
+    pred: *BackendInstance,
+    target: *BackendInstance,
+    n: usize,
+    alpha: f64,
+    gamma: f64,
+};
+
+pub const AnyUserData = union(enum) {
+    matmul: MatMulUserData,
+    conv: ConvUserData,
+    batchnorm: BatchNormUserData,
+    mse: MSEUserData,
+    focal: FocalUserData,
+    bce: BCEUserData,
+    smoothl1: SmoothL1UserData,
 };
 
 pub const TensorError = error{OutOfMemory};

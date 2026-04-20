@@ -2,7 +2,7 @@ const std = @import("std");
 const tensorImpl = @import("TensorImplementacao.zig");
 const cpu = @import("TensorCPU.zig");
 const cpusimd = @import("TensorCPUSIMD.zig");
-const computacao = @import("computacao");
+const computacao = @import("../../../computacao/mod.zig");
 const ComputacaoContextoModule = computacao.ComputacaoContextoModule;
 const tipo_mod = computacao.TipoModule;
 
@@ -12,8 +12,7 @@ pub const Tensor = struct {
     shape: []usize,
     size: usize,
     requires_grad: bool,
-    grad_fn: ?*const fn (user: ?*u8, allocator: *std.mem.Allocator, grad: []const f64) void,
-    grad_fn_user: ?*u8,
+    grad_fn: ?*const fn (impl_ptr: *tensorImpl.BackendInstance, allocator: *std.mem.Allocator, grad: []const f64) void,
 
     pub fn init(ctx: *ComputacaoContextoModule.ComputacaoContexto, allocator: *std.mem.Allocator, shape_in: []const usize) !*Tensor {
         var total: usize = 1;
@@ -72,7 +71,7 @@ pub const Tensor = struct {
     }
 
     pub fn backward(self: *Tensor, allocator: *std.mem.Allocator, grad: []const f64) void {
-        if (self.grad_fn) |fnptr| fnptr(self.grad_fn_user, allocator, grad);
+        if (self.grad_fn) |fnptr| fnptr(self.impl_ptr, allocator, grad);
     }
 
     pub fn destroy(self: *Tensor, allocator: *std.mem.Allocator) void {
@@ -130,10 +129,10 @@ pub const Tensor = struct {
                     }
                 }
                 // attach CPU matmul backward userdata and callback
-                const ud = try allocator.create(tensorImpl.MatMulUserData);
-                ud.* = .{ .a = self.impl_ptr, .b = other.impl_ptr, .m = m, .n = n, .p = p };
+                const ud = try allocator.create(tensorImpl.AnyUserData);
+                ud.* = .{ .matmul = .{ .a = self.impl_ptr, .b = other.impl_ptr, .m = m, .n = n, .p = p } };
+                result.impl_ptr.user = ud;
                 result.grad_fn = &cpu.cpu_matmul_backward;
-                result.grad_fn_user = @ptrCast(?*u8, ud);
             },
             .CPUSIMD => {
                 const out_impl = try cpusimd.simd_matMul(allocator, self.impl_ptr, other.impl_ptr, m, n, p);
@@ -147,10 +146,10 @@ pub const Tensor = struct {
                 obj.size = m * p;
                 obj.requires_grad = false;
                 // allocate and attach matmul user-data for backward
-                const ud = try allocator.create(cpusimd.MatMulUserData);
-                ud.* = .{ .a = self.impl_ptr, .b = other.impl_ptr, .m = m, .n = n, .p = p };
+                const ud = try allocator.create(tensorImpl.AnyUserData);
+                ud.* = .{ .matmul = .{ .a = self.impl_ptr, .b = other.impl_ptr, .m = m, .n = n, .p = p } };
+                out_impl.user = ud;
                 obj.grad_fn = &cpusimd.simd_matmul_backward;
-                obj.grad_fn_user = @ptrCast(?*u8, ud);
                 result = obj;
             },
             else => {
@@ -193,10 +192,10 @@ pub const Tensor = struct {
                 for (0..n) |i| res.set(i, data[i]);
                 allocator.free(data);
                 // attach CPU batchnorm userdata and backward
-                const ud = try allocator.create(tensorImpl.BatchNormUserData);
-                ud.* = .{ .input = self.impl_ptr, .out = res.impl_ptr, .denom = denom, .n = n };
+                const ud = try allocator.create(tensorImpl.AnyUserData);
+                ud.* = .{ .batchnorm = .{ .input = self.impl_ptr, .out = res.impl_ptr, .denom = denom, .n = n } };
+                res.impl_ptr.user = ud;
                 res.grad_fn = &cpu.cpu_batchnorm_backward;
-                res.grad_fn_user = @ptrCast(?*u8, ud);
                 result = res;
             },
             .CPUSIMD => {
@@ -222,10 +221,10 @@ pub const Tensor = struct {
                 varacc /= @as(f64, self.size);
                 const denom = std.math.sqrt(varacc + epsilon);
 
-                const ud = try allocator.create(cpusimd.BatchNormUserData);
-                ud.* = .{ .input = self.impl_ptr, .out = out_impl, .denom = denom, .n = self.size };
+                const ud = try allocator.create(tensorImpl.AnyUserData);
+                ud.* = .{ .batchnorm = .{ .input = self.impl_ptr, .out = out_impl, .denom = denom, .n = self.size } };
+                out_impl.user = ud;
                 obj.grad_fn = &cpusimd.simd_batchnorm_backward;
-                obj.grad_fn_user = @ptrCast(?*u8, ud);
                 result = obj;
             },
             else => return error.InvalidArgument,
@@ -262,10 +261,10 @@ pub const Tensor = struct {
                     }
                 }
                 // attach CPU conv backward userdata and callback
-                const cud = try allocator.create(tensorImpl.ConvUserData);
-                cud.* = .{ .input = self.impl_ptr, .kernel = kernel.impl_ptr, .hin = hin, .win = win, .kh = kh, .kw = kw };
+                const cud = try allocator.create(tensorImpl.AnyUserData);
+                cud.* = .{ .conv = .{ .input = self.impl_ptr, .kernel = kernel.impl_ptr, .hin = hin, .win = win, .kh = kh, .kw = kw } };
+                result.impl_ptr.user = cud;
                 result.grad_fn = &cpu.cpu_conv_backward;
-                result.grad_fn_user = @ptrCast(?*u8, cud);
             },
             .CPUSIMD => {
                 const out_impl = try cpusimd.simd_conv(allocator, self.impl_ptr, hin, win, kernel.impl_ptr, kh, kw);
@@ -278,10 +277,10 @@ pub const Tensor = struct {
                 obj.shape = shape_buf[0..2];
                 obj.size = (hin - kh + 1) * (win - kw + 1);
                 obj.requires_grad = false;
-                const ud = try allocator.create(cpusimd.ConvUserData);
-                ud.* = .{ .input = self.impl_ptr, .kernel = kernel.impl_ptr, .hin = hin, .win = win, .kh = kh, .kw = kw };
+                const ud = try allocator.create(tensorImpl.AnyUserData);
+                ud.* = .{ .conv = .{ .input = self.impl_ptr, .kernel = kernel.impl_ptr, .hin = hin, .win = win, .kh = kh, .kw = kw } };
+                out_impl.user = ud;
                 obj.grad_fn = &cpusimd.simd_conv_backward;
-                obj.grad_fn_user = @ptrCast(?*u8, ud);
                 result = obj;
             },
             else => {

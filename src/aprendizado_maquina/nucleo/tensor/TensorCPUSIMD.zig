@@ -77,14 +77,14 @@ pub fn simd_matMul(allocator: *std.mem.Allocator, a_impl: *Backend, b_impl: *Bac
     return out;
 }
 
-pub fn simd_matmul_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: []const f64) void {
-    if (user == null) return;
-    const ud = @ptrCast(*@import("TensorImplementacao.zig").MatMulUserData, user.*);
-    const a = ud.a.*;
-    const b = ud.b.*;
-    const m = ud.m;
-    const n = ud.n;
-    const p = ud.p;
+pub fn simd_matmul_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []const f64) void {
+    const udptr = impl_ptr.user orelse return;
+    const ud = udptr.*;
+    const a = ud.matmul.a.*;
+    const b = ud.matmul.b.*;
+    const m = ud.matmul.m;
+    const n = ud.matmul.n;
+    const p = ud.matmul.p;
 
     // Compute gradients: a_grad = grad * b^T  (m x p) * (p x n) -> (m x n)
     // and b_grad = a^T * grad  (n x m) * (m x p) -> (n x p)
@@ -92,23 +92,27 @@ pub fn simd_matmul_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: []c
     for (0..m * n) |i| a.grad[i] = 0.0;
     for (0..n * p) |i| b.grad[i] = 0.0;
 
+    const has_scalar_upstream = grad.len == 1;
+
     // a_grad
-    for (i in 0..m) {
-        for (k in 0..n) {
+    for (0..m) |i| {
+        for (0..n) |k| {
             var sum: f64 = 0.0;
-            for (j in 0..p) {
-                sum += grad[i * p + j] * b.data[k * p + j];
+            for (0..p) |j| {
+                const upstream = if (has_scalar_upstream) grad[0] else grad[i * p + j];
+                sum += upstream * b.data[k * p + j];
             }
             a.grad[i * n + k] += sum;
         }
     }
 
     // b_grad
-    for (k in 0..n) {
-        for (j in 0..p) {
+    for (0..n) |k| {
+        for (0..p) |j| {
             var sum: f64 = 0.0;
-            for (i in 0..m) {
-                sum += a.data[i * n + k] * grad[i * p + j];
+            for (0..m) |i| {
+                const upstream = if (has_scalar_upstream) grad[0] else grad[i * p + j];
+                sum += a.data[i * n + k] * upstream;
             }
             b.grad[k * p + j] += sum;
         }
@@ -125,11 +129,11 @@ pub fn simd_conv(allocator: *std.mem.Allocator, input_impl: *Backend, hin: usize
     const wout = win - kw + 1;
     var out = try create_impl(allocator, hout * wout);
 
-    for (hout) |i| {
-        for (wout) |j| {
+    for (0..hout) |i| {
+        for (0..wout) |j| {
             var sum: f64 = 0.0;
-            for (kh) |ii| {
-                for (kw) |jj| {
+            for (0..kh) |ii| {
+                for (0..kw) |jj| {
                     const in_r = i + ii;
                     const in_c = j + jj;
                     const in_idx = in_r * win + in_c;
@@ -143,15 +147,15 @@ pub fn simd_conv(allocator: *std.mem.Allocator, input_impl: *Backend, hin: usize
     return out;
 }
 
-pub fn simd_conv_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: []const f64) void {
-    if (user == null) return;
-    const ud = @ptrCast(*@import("TensorImplementacao.zig").ConvUserData, user.*);
-    const inb = ud.input.*;
-    const kb = ud.kernel.*;
-    const hin = ud.hin;
-    const win = ud.win;
-    const kh = ud.kh;
-    const kw = ud.kw;
+pub fn simd_conv_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []const f64) void {
+    const udptr = impl_ptr.user orelse return;
+    const ud = udptr.*;
+    const inb = ud.conv.input.*;
+    const kb = ud.conv.kernel.*;
+    const hin = ud.conv.hin;
+    const win = ud.conv.win;
+    const kh = ud.conv.kh;
+    const kw = ud.conv.kw;
     const hout = hin - kh + 1;
     const wout = win - kw + 1;
 
@@ -159,6 +163,7 @@ pub fn simd_conv_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: []con
     for (0..hin * win) |i| inb.grad[i] = 0.0;
     for (0..kh * kw) |i| kb.grad[i] = 0.0;
 
+    const has_scalar_upstream = grad.len == 1;
     // kernel gradients: sum over output positions
     for (0..kh) |ii| {
         for (0..kw) |jj| {
@@ -167,7 +172,8 @@ pub fn simd_conv_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: []con
                 for (0..wout) |j| {
                     const in_r = i + ii;
                     const in_c = j + jj;
-                    sum += inb.data[in_r * win + in_c] * grad[i * wout + j];
+                    const upstream = if (has_scalar_upstream) grad[0] else grad[i * wout + j];
+                    sum += inb.data[in_r * win + in_c] * upstream;
                 }
             }
             kb.grad[ii * kw + jj] += sum;
@@ -177,7 +183,7 @@ pub fn simd_conv_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: []con
     // input gradients: distribute kernel * grad to input positions
     for (0..hout) |i| {
         for (0..wout) |j| {
-            const g = grad[i * wout + j];
+            const g = if (has_scalar_upstream) grad[0] else grad[i * wout + j];
             for (0..kh) |ii| {
                 for (0..kw) |jj| {
                     const in_r = i + ii;
@@ -227,13 +233,13 @@ pub fn simd_batchnorm(allocator: *std.mem.Allocator, input_impl: *Backend, epsil
     return out;
 }
 
-pub fn simd_batchnorm_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: []const f64) void {
-    if (user == null) return;
-    const ud = @ptrCast(*@import("TensorImplementacao.zig").BatchNormUserData, user.*);
-    const inb = ud.input.*;
-    const outb = ud.out.*;
-    const n = ud.n;
-    const denom = ud.denom;
+pub fn simd_batchnorm_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []const f64) void {
+    const udptr = impl_ptr.user orelse return;
+    const ud = udptr.*;
+    const inb = ud.batchnorm.input.*;
+    const outb = ud.batchnorm.out.*;
+    const n = ud.batchnorm.n;
+    const denom = ud.batchnorm.denom;
 
     // compute sums
     var sum_dy: f64 = 0.0;
@@ -245,7 +251,9 @@ pub fn simd_batchnorm_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: 
         sum_dy_y += dy * y;
     }
 
-    const inv_n = 1.0 / @as(f64, n);
+    var denom_f: f64 = 0.0;
+    for (0..n) |_| denom_f += 1.0;
+    const inv_n = 1.0 / denom_f;
     const inv_denom = 1.0 / denom;
 
     for (0..n) |i| {
@@ -253,5 +261,62 @@ pub fn simd_batchnorm_backward(user: ?*u8, allocator: *std.mem.Allocator, grad: 
         const y = outb.data[i];
         const dx = inv_denom * inv_n * ((@as(f64, n) * dy) - sum_dy - (y * sum_dy_y));
         inb.grad[i] += dx;
+    }
+}
+
+pub fn simd_mse_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []const f64) void {
+    const udptr = impl_ptr.user orelse return;
+    const ud = udptr.*;
+    const pred = ud.mse.pred.*;
+    const target = ud.mse.target.*;
+    const n = ud.mse.n;
+    const has_scalar_upstream = grad.len == 1;
+    var denom_f2: f64 = 0.0;
+    for (0..n) |_| denom_f2 += 1.0;
+    const inv_n = 1.0 / denom_f2;
+    for (0..n) |i| {
+        const p = pred.data[i];
+        const t = target.data[i];
+        const upstream = if (has_scalar_upstream) grad[0] else grad[i];
+        const dp = 2.0 * (p - t) * inv_n;
+        pred.grad[i] += upstream * dp;
+    }
+}
+
+pub fn simd_focal_backward(impl_ptr: *Backend, _: *std.mem.Allocator, grad: []const f64) void {
+    const udptr = impl_ptr.user orelse return;
+    const ud = udptr.*;
+    const pred = ud.focal.pred.*;
+    const target = ud.focal.target.*;
+    const n = ud.focal.n;
+    const alpha = ud.focal.alpha;
+    const gamma = ud.focal.gamma;
+    const has_scalar_upstream = grad.len == 1;
+    const eps: f64 = 1e-6;
+
+    for (0..n) |i| {
+        const orig = pred.data[i];
+        pred.data[i] = orig + eps;
+        var sum_plus: f64 = 0.0;
+        for (0..n) |k| {
+            const p = pred.data[k];
+            const t = target.data[k];
+            const pt = if (t == 1.0) p else (1.0 - p);
+            const logpt = if (pt <= 0.0) -1e12 else std.math.log(f64, 2.718281828459045, pt);
+            sum_plus += -alpha * std.math.pow(f64, 1.0 - pt, gamma) * logpt;
+        }
+        pred.data[i] = orig - eps;
+        var sum_minus: f64 = 0.0;
+        for (0..n) |k| {
+            const p = pred.data[k];
+            const t = target.data[k];
+            const pt = if (t == 1.0) p else (1.0 - p);
+            const logpt = if (pt <= 0.0) -1e12 else std.math.log(f64, 2.718281828459045, pt);
+            sum_minus += -alpha * std.math.pow(f64, 1.0 - pt, gamma) * logpt;
+        }
+        pred.data[i] = orig;
+        const dp = (sum_plus - sum_minus) / (2.0 * eps);
+        const upstream = if (has_scalar_upstream) grad[0] else grad[i];
+        pred.grad[i] += upstream * dp;
     }
 }
